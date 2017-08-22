@@ -119,8 +119,14 @@ func (f *file) Seek(offset int64, whence int) (int64, error) {
 	// we implement part of Seek so we can use net/http.ServeContent, which seeks to the end to determine file size
 	switch whence {
 	case io.SeekStart:
-		if offset == 0 && f.offset == 0 {
-			f.atEOF = false
+		if offset == 0 {
+			if f.offset == 0 {
+				f.atEOF = false
+				return 0, nil
+			}
+			if err := f.reopen(); err != nil {
+				return 0, err
+			}
 			return 0, nil
 		}
 	case io.SeekEnd:
@@ -153,6 +159,19 @@ func (f *file) Readdir(count int) ([]os.FileInfo, error) {
 
 func (f *file) Stat() (os.FileInfo, error) {
 	return f.file.FileInfo(), nil
+}
+
+func (f *file) reopen() error {
+	f.rc.Close()
+	rc, err := f.file.Open()
+	if err != nil {
+		f.rc = nil
+		return err
+	}
+	f.rc = rc
+	f.offset = 0
+	f.atEOF = false
+	return nil
 }
 
 type dir struct {
